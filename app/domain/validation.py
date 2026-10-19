@@ -10,6 +10,9 @@ from typing import Any
 
 from app.domain import models
 
+# Upper end of the proficiency scale documented in the analytical note.
+MAX_SKILL_LEVEL = 5
+
 
 @dataclasses.dataclass
 class ValidationResult:
@@ -115,6 +118,31 @@ def validate_cohort(
         total_min_capacity += project.min_capacity
         total_max_capacity += project.max_capacity
 
+        seen_required_skills: set[str] = set()
+        for req in project.requirements:
+            if req.project_id != project.id:
+                result.errors.append(
+                    f"Project '{project.id}' holds a requirement belonging "
+                    f"to project '{req.project_id}'."
+                )
+            if req.skill_id in seen_required_skills:
+                result.errors.append(
+                    f"Project '{project.id}' lists skill '{req.skill_id}' "
+                    "more than once."
+                )
+            seen_required_skills.add(req.skill_id)
+            if req.minimum_level < 1:
+                result.errors.append(
+                    f"Project '{project.id}' requires skill '{req.skill_id}' "
+                    f"at invalid level {req.minimum_level} (must be >= 1)."
+                )
+            elif req.minimum_level > MAX_SKILL_LEVEL:
+                result.warnings.append(
+                    f"Project '{project.id}' requires skill '{req.skill_id}' "
+                    f"at level {req.minimum_level}, above the "
+                    f"{MAX_SKILL_LEVEL}-point scale."
+                )
+
     defined_skill_ids = {s.id for s in skills} if skills else None
 
     for student in students:
@@ -127,6 +155,16 @@ def validate_cohort(
         seen_ranks: set[int] = set()
         seen_preferred_projects: set[str] = set()
         for pref in student.preferences:
+            if pref.student_id != student.id:
+                result.errors.append(
+                    f"Student '{student.id}' holds a preference belonging "
+                    f"to student '{pref.student_id}'."
+                )
+            if pref.rank < 1:
+                result.errors.append(
+                    f"Student '{student.id}' has invalid rank {pref.rank} "
+                    f"for project '{pref.project_id}' (must be >= 1)."
+                )
             if pref.project_id not in project_ids:
                 result.errors.append(
                     f"Student '{student.id}' ranked unknown project "
@@ -145,6 +183,18 @@ def validate_cohort(
                 )
             seen_ranks.add(pref.rank)
 
+        for s_id, level in student.skills.items():
+            if level < 0:
+                result.errors.append(
+                    f"Student '{student.id}' has negative level {level} in "
+                    f"skill '{s_id}'."
+                )
+            elif level > MAX_SKILL_LEVEL:
+                result.warnings.append(
+                    f"Student '{student.id}' has level {level} in skill "
+                    f"'{s_id}', above the {MAX_SKILL_LEVEL}-point scale."
+                )
+
         if defined_skill_ids:
             for s_id in student.skills:
                 if s_id not in defined_skill_ids:
@@ -162,9 +212,11 @@ def validate_cohort(
                         f"'{req.skill_id}'."
                     )
 
+    fixed_project_counts: dict[str, int] = {}
+    fixed_by_project: dict[str, list[str]] = {}
     if fixed_assignments:
-        fixed_student_counts: dict[str, int] = {}
-        fixed_project_counts: dict[str, int] = {}
+        fixed_student_projects: dict[str, set[str]] = {}
+        seen_pairs: set[tuple[str, str]] = set()
 
         for fixed in fixed_assignments:
             if fixed.student_id not in student_ids:
@@ -178,18 +230,30 @@ def validate_cohort(
                     f"'{fixed.project_id}'."
                 )
 
-            fixed_student_counts[fixed.student_id] = (
-                fixed_student_counts.get(fixed.student_id, 0) + 1
+            pair = (fixed.student_id, fixed.project_id)
+            if pair in seen_pairs:
+                result.warnings.append(
+                    f"Fixed assignment of student '{fixed.student_id}' to "
+                    f"project '{fixed.project_id}' is listed more than once."
+                )
+                continue
+            seen_pairs.add(pair)
+
+            fixed_student_projects.setdefault(fixed.student_id, set()).add(
+                fixed.project_id
             )
             fixed_project_counts[fixed.project_id] = (
                 fixed_project_counts.get(fixed.project_id, 0) + 1
             )
+            fixed_by_project.setdefault(fixed.project_id, []).append(
+                fixed.student_id
+            )
 
-        for s_id, count in fixed_student_counts.items():
-            if count > 1:
+        for s_id, locked_projects in fixed_student_projects.items():
+            if len(locked_projects) > 1:
                 result.errors.append(
                     f"Contradictory fixed assignment: student '{s_id}' is "
-                    f"fixed to {count} different projects."
+                    f"fixed to {len(locked_projects)} different projects."
                 )
 
         for p in projects:
@@ -222,24 +286,71 @@ def validate_cohort(
         result.errors.append(msg)
         result.infeasibility_reasons.append(msg)
 
+    # Locked students cannot fill other projects' minimum quotas, so the
+    # unlocked remainder must cover every project's residual minimum.
+    locked_count = sum(fixed_project_counts.values())
+    if enforce_exact_allocation and locked_count:
+        free_students = len(students) - locked_count
+        residual_min = sum(
+            max(p.min_capacity - fixed_project_counts.get(p.id, 0), 0)
+            for p in projects
+        )
+        if 0 <= free_students < residual_min:
+            result.is_feasible = False
+            msg = (
+                f"Unlocked students ({free_students}) cannot cover the "
+                f"residual minimum capacity ({residual_min}) left after "
+                f"{locked_count} fixed assignments."
+            )
+            result.errors.append(msg)
+            result.infeasibility_reasons.append(msg)
+
+    students_by_id = {s.id: s for s in students}
     for project in projects:
+        locked_ids = fixed_by_project.get(project.id, [])
+        # A project is forced open by a positive minimum or by a lock.
+        forced_open = project.min_capacity >= 1 or bool(locked_ids)
         for req in project.requirements:
-            if req.is_mandatory:
-                qualified_students = [
-                    s
-                    for s in students
-                    if s.get_skill_level(req.skill_id) >= req.minimum_level
-                ]
-                if not qualified_students:
-                    result.is_feasible = False
-                    msg = (
-                        f"Mandatory requirement impossible: No student in "
-                        f"cohort meets mandatory skill '{req.skill_id}' "
+            if not req.is_mandatory:
+                continue
+            qualified_ids = {
+                s.id
+                for s in students
+                if s.get_skill_level(req.skill_id) >= req.minimum_level
+            }
+            if not qualified_ids:
+                if not forced_open:
+                    result.warnings.append(
+                        f"No student meets mandatory skill '{req.skill_id}' "
                         f"(level {req.minimum_level}) for project "
-                        f"'{project.id}'."
+                        f"'{project.id}'; the project will stay empty."
                     )
-                    result.errors.append(msg)
-                    result.infeasibility_reasons.append(msg)
+                    continue
+                result.is_feasible = False
+                msg = (
+                    f"Mandatory requirement impossible: No student in "
+                    f"cohort meets mandatory skill '{req.skill_id}' "
+                    f"(level {req.minimum_level}) for project "
+                    f"'{project.id}'."
+                )
+                result.errors.append(msg)
+                result.infeasibility_reasons.append(msg)
+                continue
+            # Seats fully taken by locks must already include a qualifier.
+            locked_known = [i for i in locked_ids if i in students_by_id]
+            if (
+                len(locked_known) >= project.max_capacity
+                and not qualified_ids.intersection(locked_known)
+            ):
+                result.is_feasible = False
+                msg = (
+                    f"Mandatory requirement impossible: project "
+                    f"'{project.id}' is filled by fixed assignments, none "
+                    f"of whom meets mandatory skill '{req.skill_id}' "
+                    f"(level {req.minimum_level})."
+                )
+                result.errors.append(msg)
+                result.infeasibility_reasons.append(msg)
 
     if result.errors:
         result.is_valid = False
