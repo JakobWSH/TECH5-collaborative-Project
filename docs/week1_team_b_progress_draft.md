@@ -23,6 +23,8 @@ The starter kit is a single Flask application backed by SQLite, with shared doma
 - **Victor:** Document the candidate matching model and identify solver constraints/limitations in `app/engine/solvers.py` and `docs/analytical_formulation.md`.
 These are proposed assignments, not claims of completed work.
 
+**Status 19 Oct (Victor):** the formulation document (`docs/team_b_formulation.md`) and a first set of validation additions with tests (`tests/test_input_validation.py`) are on branch `team-b/formulation-validation`. Faisal: please review the validation part against your audit before we merge.
+
 ## 3. Proposed assignment approach (pending professor approval)
 **Candidate method:** Binary integer linear programming (ILP), potentially implemented with PuLP and a compatible solver, subject to course-instructor approval.
 
@@ -41,29 +43,38 @@ These are proposed assignments, not claims of completed work.
 - Generate up to three distinct feasible alternatives when possible; do not fabricate alternatives if only one exists.
 - Report infeasibility explicitly rather than silently relaxing constraints.
 
+**Full formulation:** `docs/team_b_formulation.md` gives the sets, parameters, skill-fit and preference scores, the five hard constraints (the mandatory-skill rule is linearised without auxiliary variables), the no-good cut, the three objectives (`PREFERENCE`, `SKILL_FIT`, `BALANCED`), the run-status mapping and known limitations.
+
 **Why propose ILP:** Binary decisions and hard linear constraints can be expressed directly, feasible alternatives can be made distinct through excluded-solution constraints, and the decisions can be explained to users. Final choice, precise objectives, and assumptions require professor review.
 
 ## 4. Week 1 technical activities and verification
 - [ ] Both groups agree to preserve `app/contract/contract.py` for initial integration.
 - [ ] Each student checks out the shared repository; Team B works on `team-b/week1` or topic branches created from it.
-- [ ] Run `python -m pytest -v` on the unmodified starter and record the exact summary.
-- [ ] Inspect `app/persistence/schema.sql`, `app/domain/models.py`, `app/contract/contract.py`, `app/contract/mocks.py`.
-- [ ] Review `app/domain/validation.py` with `tests/test_validation.py` and validation-related edge-case tests. Preserve existing correct behavior, add targeted tests for gaps.
+- [x] Run `python -m pytest -v` on the unmodified starter and record the exact summary.
+- [x] Inspect `app/persistence/schema.sql`, `app/domain/models.py`, `app/contract/contract.py`, `app/contract/mocks.py`.
+- [x] Review `app/domain/validation.py` with `tests/test_validation.py` and validation-related edge-case tests. Preserve existing correct behavior, add targeted tests for gaps.
 - [ ] Document the method proposal and ask the instructor for approval. Do not present the model as approved until confirmed.
 - [ ] Team A demonstrates creating projects/skills and comparing mock solutions, if completed; request evidence from Group 12.
 - [ ] Record test execution output after changes, including unexpected failures, expected failures, and any unresolved issues.
 
-**Baseline caveat:** The README says 50 tests with 35 passes and 15 expected failures. A source-file count found 51 `test_...` functions and 15 explicit `xfail` decorators. These claims must be reconciled against an actual local `pytest` run; do not claim either historical summary as your own run.
+**Baseline caveat resolved:** The README says 50 tests (35 passed, 15 xfail). An actual run of the unmodified starter gives **51 tests: 36 passed, 15 xfailed**. The README is off by one, and the 15 xfails match: 3 for Team A and 12 for Team B.
 
 ### Insert verified progress here before submission
-- **Commit/branch:** [GitHub link to work]
-- **Environment:** [Python version, OS]
-- **Initial pytest result:** [Exact terminal summary]
-- **Files changed and why:** [List]
-- **Final pytest result:** [Exact terminal summary]
+- **Commit/branch:** `team-b/formulation-validation` (from `team-b/week1`) [add GitHub link once pushed]
+- **Environment:** Python 3.13.0, macOS 26.6.2, Flask/pytest from `requirements.txt`
+- **Initial pytest result:** `36 passed, 15 xfailed in 0.80s`
+- **Files changed and why:**
+  - `app/domain/validation.py`: New rules for gaps found in the audit: rank ≥ 1, preference/requirement ownership, skill-level bounds, duplicate requirements, residual minimum capacity after locks, a lock that forces an unqualified project open, and locks that fill a project without a qualified member. Two false errors fixed: an identical lock entered twice was reported as "contradictory", and an optional (min 0) project with an unmet mandatory skill was reported as infeasible when it can simply stay empty. All existing error messages kept.
+  - `app/engine/solvers.py`: `validate_inputs` now rejects unknown strategy keys and `max_alternatives` outside 1–10. Constants `SUPPORTED_STRATEGY_KEYS` and `MAX_ALTERNATIVES_LIMIT` added.
+  - `tests/test_input_validation.py`: 16 tests, one per new rule.
+  - `docs/team_b_formulation.md`: the proposed ILP model and the mapping from each validation rule to a model constraint.
+- **Final pytest result:** `52 passed, 15 xfailed in 0.67s`. No regressions. The 12 Team B xfails are solver/metrics work planned for Week 2. All four demo scenarios give the same validation verdicts as before.
 - **Mock workflow observed:** [What ran and what was displayed]
 - **Solver method approval status:** [Pending/Approved; date if confirmed]
-- **Issues to carry into Week 2:** [List]
+- **Issues to carry into Week 2:**
+  - Instructor clarification: does "mandatory skill" mean at least one qualified member per project (our assumption), or every member qualified?
+  - Pin `pulp==2.9.0`. PuLP 4.1.0 fails on import because it needs numpy, which it does not declare.
+  - `test_assignment_engine_initialization` asserts `len(engine.strategies) == 0` and `test_assignment_engine_raises_not_implemented` expects `NotImplementedError`. Both must be updated when the strategies are registered; agree this with the instructor and Team A.
 - **Team A progress confirmed by:** [Name and evidence]
 
 ## 5. Work plan for remaining weeks

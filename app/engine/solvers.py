@@ -19,6 +19,11 @@ from app.domain import validation
 from app.engine import metrics
 from app.persistence import repositories
 
+# Strategy keys offered by the dashboard (Component A) to the engine.
+SUPPORTED_STRATEGY_KEYS = ("PREFERENCE", "SKILL_FIT", "BALANCED")
+# Upper bound on requested alternatives, keeping the cut loop small.
+MAX_ALTERNATIVES_LIMIT = 10
+
 
 class AssignmentStrategy(abc.ABC):
     """Abstract Base Class for student-to-project allocation strategies.
@@ -127,10 +132,21 @@ class AssignmentEngine(contract.AssignmentEngineContract):
             skills=request.skills,
             fixed_assignments=request.fixed_assignments,
         )
+        errors = list(val_result.errors)
+        if request.strategy_key not in SUPPORTED_STRATEGY_KEYS:
+            errors.append(
+                f"Unknown strategy '{request.strategy_key}'; expected one "
+                f"of {', '.join(SUPPORTED_STRATEGY_KEYS)}."
+            )
+        if not 1 <= request.max_alternatives <= MAX_ALTERNATIVES_LIMIT:
+            errors.append(
+                f"Requested alternatives ({request.max_alternatives}) must "
+                f"be between 1 and {MAX_ALTERNATIVES_LIMIT}."
+            )
         return contract.ValidationOutcome(
-            is_valid=val_result.is_valid,
+            is_valid=not errors,
             is_feasible=val_result.is_feasible,
-            errors=list(val_result.errors),
+            errors=errors,
             warnings=list(val_result.warnings),
             infeasibility_reasons=list(val_result.infeasibility_reasons),
         )
