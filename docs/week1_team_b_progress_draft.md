@@ -25,6 +25,8 @@ These are proposed assignments, not claims of completed work.
 
 **Status 19 Oct (Victor):** the formulation document (`docs/team_b_formulation.md`) and a first set of validation additions with tests (`tests/test_input_validation.py`) are on branch `team-b/formulation-validation`. Faisal: please review the validation part against your audit before we merge.
 
+**Status 19 Oct (Faisal):** reviewed the validation part and added a test and fix to handle a case for unusable project capacity in `tests/test_input_validation.py` and 'validation.py'. To be merged.
+
 ## 3. Proposed assignment approach (pending professor approval)
 **Candidate method:** Binary integer linear programming (ILP), potentially implemented with PuLP and a compatible solver, subject to course-instructor approval.
 
