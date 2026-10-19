@@ -57,8 +57,8 @@ Why an ILP rather than stable matching or a heuristic:
 scale):**
 
 - Preference utility
-  $$w_{s,p}=\begin{cases}\dfrac{R+1-r_{s,p}}{R} & p \text{ ranked by } s\\[4pt] 0 & \text{otherwise}\end{cases}$$
-  First choice = 1, last ranked choice = $1/R$, unranked = 0.
+  $$w_{s,p}=\begin{cases}\dfrac{R+1-r_{s,p}}{R} & p \text{ ranked by } s \text{ and } R \ge 1\\[4pt] 0 & \text{otherwise}\end{cases}$$
+  First choice = 1, last ranked choice = $1/R$, unranked = 0. When no student in the cohort submits any ranked preferences ($R = 0$), $w_{s,p} = 0\ \forall s,p$, avoiding division by zero; the preference objective becomes zero and the solver allocates based on the secondary tie-breaker (skill fit).
 - Skill fit
   $$\sigma_{s,p}=\begin{cases}1 & K_p=\emptyset\\[2pt] \dfrac{1}{\lvert K_p\rvert}\displaystyle\sum_{k\in K_p}\min\!\Big(\frac{a_{s,k}}{q_{p,k}},1\Big) & \text{otherwise}\end{cases}$$
   A project with no requirements is a neutral fit, 1.0 (edge case 4). A student
@@ -94,9 +94,15 @@ balanced strategy.
 
 ## 4. Objectives (one per strategy key)
 
-$\varepsilon = 10^{-3}$ is a lexicographic tie-breaker. It is small enough
-never to override the primary term, and it makes results deterministic and
-explainable.
+$\varepsilon$ serves as a secondary tie-breaker. For strict lexicographic priority
+where the secondary criterion never overturns even a single rank difference in the
+primary criterion, the maximum possible cohort-wide secondary contribution ($n \cdot \varepsilon$)
+must be strictly less than the smallest non-zero primary step ($\min \Delta w = 1/R$).
+Hence, rather than a static $\varepsilon = 10^{-3}$ (which for $n \ge 100, R \ge 10$ yields
+$n \varepsilon \ge 1/R$), the solver in Week 2 will dynamically set:
+$$\varepsilon = \frac{1}{2 \cdot n \cdot \max(R, 1)}$$
+or solve hierarchically (optimizing primary first, then secondary subject to primary optimal value).
+This makes results deterministic, explainable, and theoretically sound.
 
 | Strategy key | Class | Objective |
 |---|---|---|
