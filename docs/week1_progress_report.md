@@ -98,7 +98,7 @@ These are proposed assignments, not claims of completed work.
 **Week 3 — 2 November:** Resolve infeasibility/edge-case behavior, verify all supplied automated tests without unexpected failures or regressions, finish the analytical note using `docs/analytical_note_template.md`, and rehearse a reproducible demonstration.
 
 ## 6. Submission check
-- [ ] Confirm whether Canvas expects one combined report for Team 3 or separate group uploads.
-- [ ] All work and claims checked by a group member.
+- [X] Confirm whether Canvas expects one combined report for Team 3 or separate group uploads.
+- [X] All work and claims checked by a group member.
 - [ ] Instructor approval request documented.
-- [ ] Export finalized report to PDF or DOC according to the Canvas upload specification.
+- [X] Export finalized report to PDF or DOC according to the Canvas upload specification.
