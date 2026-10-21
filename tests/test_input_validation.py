@@ -153,6 +153,42 @@ def test_unqualified_optional_project_may_stay_empty() -> None:
     assert any("will stay empty" in w for w in res.warnings)
 
 
+def test_unusable_project_capacity() -> None:
+    """Checks that an unstaffable project is not counted as available capacity."""
+    projects = [
+        models.Project(
+            id="P1",
+            title="Kernel Dev",
+            min_capacity=0,
+            max_capacity=2,
+            requirements=[
+                models.ProjectRequirement(
+                    "P1",
+                    "rust",
+                    minimum_level=4,
+                    is_mandatory=True,
+                )
+            ],
+        ),
+        models.Project(
+            id="P2",
+            title="P2",
+            min_capacity=0,
+            max_capacity=1,
+        ),
+    ]
+
+    students = [
+        _student("S1", skills={"py": 3}, prefs=["P1", "P2"]),
+        _student("S2", skills={"py": 3}, prefs=["P2", "P1"]),
+    ]
+
+    res = validation.validate_cohort(students, projects)
+
+    assert res.is_feasible is False
+    assert any("Insufficient usable capacity" in err for err in res.errors)
+
+
 def test_lock_forces_open_unqualified_project() -> None:
     """Locking a student into an unstaffable project is infeasible."""
     projects = [

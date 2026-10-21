@@ -81,12 +81,14 @@ def test_contract_execute_and_retrieval(tmp_path: pathlib.Path) -> None:
         max_alternatives=2,
     )
 
-    # 1. AssignmentEngine skeleton raises NotImplementedError for Team B
+    # 1. Week 2 real engine fulfills the contract and persists valid runs.
     engine: contract.AssignmentEngineContract = solvers.AssignmentEngine()
-    with pytest.raises(NotImplementedError):
-        engine.execute_run(request)
+    real_run = engine.execute_run(request)
+    assert real_run.status == "COMPLETED"
+    assert engine.get_run(real_run.id) is not None
+    assert all(sol.indicators["feasibility"]["is_feasible"] for sol in real_run.solutions)
 
-    # 2. MockAssignmentEngine fulfills contract execution and persistence
+    # 2. MockAssignmentEngine still fulfills contract for demonstrations
     mock_engine: contract.AssignmentEngineContract = (
         mocks.MockAssignmentEngine()
     )
@@ -148,10 +150,12 @@ def test_contract_compare_solutions(tmp_path: pathlib.Path) -> None:
     with pytest.raises(KeyError):
         mock_engine.compare_solutions(sol_a.id, "non_existent_id")
 
-    # AssignmentEngine delegates to metrics which raises NotImplementedError
+    # Real engine reads the same persisted solutions and compares indicators.
     engine: contract.AssignmentEngineContract = solvers.AssignmentEngine()
-    with pytest.raises(NotImplementedError):
-        engine.compare_solutions(sol_a.id, sol_b.id)
+    real_comparison = engine.compare_solutions(sol_a.id, sol_b.id)
+    assert isinstance(real_comparison, models.RunComparison)
+    assert real_comparison.solution_a_id == sol_a.id
+    assert real_comparison.solution_b_id == sol_b.id
 
 
 def test_mock_engine_provided() -> None:

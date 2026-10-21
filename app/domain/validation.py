@@ -306,6 +306,7 @@ def validate_cohort(
             result.infeasibility_reasons.append(msg)
 
     students_by_id = {s.id: s for s in students}
+    unusable_projects: set[str] = set()
     for project in projects:
         locked_ids = fixed_by_project.get(project.id, [])
         # A project is forced open by a positive minimum or by a lock.
@@ -320,6 +321,7 @@ def validate_cohort(
             }
             if not qualified_ids:
                 if not forced_open:
+                    unusable_projects.add(project.id)
                     result.warnings.append(
                         f"No student meets mandatory skill '{req.skill_id}' "
                         f"(level {req.minimum_level}) for project "
@@ -351,6 +353,22 @@ def validate_cohort(
                 )
                 result.errors.append(msg)
                 result.infeasibility_reasons.append(msg)
+
+    if enforce_exact_allocation and unusable_projects:
+        available_capacity = 0
+        for project in projects:
+            if project.id not in unusable_projects:
+                available_capacity += project.max_capacity
+
+        if len(students) > available_capacity:
+            result.is_feasible = False
+            msg = (
+                f"Insufficient usable capacity: cohort size ({len(students)}) "
+                f"exceeds capacity ({available_capacity}) after excluding "
+                "projects that cannot satisfy mandatory skill requirements."
+            )
+            result.errors.append(msg)
+            result.infeasibility_reasons.append(msg)
 
     if result.errors:
         result.is_valid = False
