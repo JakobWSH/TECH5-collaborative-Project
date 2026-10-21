@@ -43,14 +43,6 @@
       </button>
     </form>
 
-    <!-- TODO (Team A): Implement Side-by-Side Solution Comparison -->
-    <div class="alert alert-info" style="margin-bottom: 1.5rem;">
-      <strong>Team A Starter Carcass:</strong>
-      Implement the comparative analysis view below using the <code>RunComparison</code> DTO.
-      Display comparative delta metrics (skill fit, preference rank, Gini), trade-off findings,
-      and the table of changed student allocations between Solution A and Solution B.
-    </div>
-
     {% if comparison and sol_a and sol_b %}
       <!-- Comparative KPI Deltas -->
       <div class="kpi-grid">
@@ -122,18 +114,24 @@
           <tbody>
             {% for c in comparison.changed_assignments %}
               <tr>
-                <td><strong>{{ c.student_name or c.student_id }}</strong></td>
-                <td>{{ c.project_a_title or c.project_a_id }}</td>
-                <td>Choice #{{ c.rank_a }}</td>
-                <td>{{ c.project_b_title or c.project_b_id }}</td>
-                <td>Choice #{{ c.rank_b }}</td>
+                <td><strong>{{ c.student_id }}</strong></td>
+                <td>{{ c.project_a_id or "Not assigned" }}</td>
+                <td>{% if c.rank_a is none %}Unranked{% else %}Choice #{{ c.rank_a }}{% endif %}</td>
+                <td>{{ c.project_b_id or "Not assigned" }}</td>
+                <td>{% if c.rank_b is none %}Unranked{% else %}Choice #{{ c.rank_b }}{% endif %}</td>
                 <td>
-                  {% if c.rank_delta < 0 %}
+                  {% if c.rank_delta is not none and c.rank_delta < 0 %}
                     <span class="badge badge-success">&#9650; {{ c.rank_delta|abs }} ranks better</span>
-                  {% elif c.rank_delta > 0 %}
+                  {% elif c.rank_delta is not none and c.rank_delta > 0 %}
                     <span class="badge badge-danger">&#9660; {{ c.rank_delta }} ranks worse</span>
+                  {% elif c.rank_a is none and c.rank_b is not none %}
+                    <span class="badge badge-success">&#9650; Improved from unranked</span>
+                  {% elif c.rank_a is not none and c.rank_b is none %}
+                    <span class="badge badge-danger">&#9660; Worsened to unranked</span>
+                  {% elif c.rank_a is none and c.rank_b is none %}
+                    <span class="badge badge-secondary">Unranked in both</span>
                   {% else %}
-                    <span class="badge badge-secondary">Lateral move</span>
+                    <span class="badge badge-secondary">No rank change</span>
                   {% endif %}
                 </td>
               </tr>
