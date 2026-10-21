@@ -12,12 +12,20 @@ import abc
 import logging
 from typing import Any
 import uuid
+import time
+import dataclasses
+import sqlite3
 
 from app.contract import contract
 from app.domain import models
 from app.domain import validation
 from app.engine import metrics
 from app.persistence import repositories
+
+# Strategy keys offered by the dashboard (Component A) to the engine.
+SUPPORTED_STRATEGY_KEYS = ("PREFERENCE", "SKILL_FIT", "BALANCED")
+# Upper bound on requested alternatives, keeping the cut loop small.
+MAX_ALTERNATIVES_LIMIT = 10
 
 
 class AssignmentStrategy(abc.ABC):
@@ -62,30 +70,144 @@ class AssignmentStrategy(abc.ABC):
         fixed_assignments: list[models.FixedAssignment] | None = None,
         excluded_solutions: list[list[tuple[str, str]]] | None = None,
     ) -> tuple[str, list[models.Assignment], float | None, dict[str, Any]]:
-        """Solves the assignment problem under this strategy's formulation.
+        """Solve the integer program with CBC; excluded allocations use no-good cuts.
 
-        In accordance with Section 8 of the specification, must:
-        - Assign students to projects respecting capacities [min_cap, max_cap].
-        - Enforce each student receives exactly one project allocation.
-        - Strictly preserve pre-allocated fixed assignments.
-        - Support integer no-good cuts (excluded_solutions) to guarantee distinct
-          Pareto alternatives.
-
-        Args:
-            students: List of students in the cohort.
-            projects: List of available semester projects.
-            fixed_assignments: Pre-assigned student-project pairs that must hold.
-            excluded_solutions: Previous solution allocations to cut out.
-
-        Returns:
-            A tuple of (solver_status, assignments, objective_value, diagnostics).
-
-        Raises:
-            NotImplementedError: To be implemented by Team B.
+        The team-level interpretation of mandatory skills is PROVISIONAL until
+        the instructor confirms it. It is isolated in the marked constraint.
         """
-        raise NotImplementedError(
-            f"TODO (Team B): Implement solver logic for strategy '{self.name}'"
+        import pulp  # Installed through requirements.txt on the student's Mac.
+
+        started = time.monotonic()
+        problem = pulp.LpProblem("TECH5_Assignment", pulp.LpMaximize)
+        student_ids = [s.id for s in students]
+        project_ids = [p.id for p in projects]
+        by_project = {p.id: p for p in projects}
+        assignment = {
+            (sid, pid): pulp.LpVariable(f"x_{i}_{j}", cat="Binary")
+            for i, sid in enumerate(student_ids)
+            for j, pid in enumerate(project_ids)
+        }
+        # Exactly one project per student.
+        for sid in student_ids:
+            problem += pulp.lpSum(assignment[sid, p] for p in project_ids) == 1
+        # Lower/upper project capacity, even when minimum is zero.
+        for p in projects:
+            headcount = pulp.lpSum(assignment[sid, p.id] for sid in student_ids)
+            problem += headcount >= p.min_capacity
+            problem += headcount <= p.max_capacity
+            # PROVISIONAL mandatory-skill interpretation: if staffed, at least
+            # one student on the project satisfies EACH mandatory requirement.
+            for req in p.requirements:
+                if not req.is_mandatory:
+                    continue
+                qualified = [
+                    s.id for s in students
+                    if s.get_skill_level(req.skill_id) >= req.minimum_level
+                ]
+                problem += (
+                    p.max_capacity * pulp.lpSum(assignment[sid, p.id] for sid in qualified)
+                    >= headcount
+                )
+        for lock in fixed_assignments or []:
+            problem += assignment[lock.student_id, lock.project_id] == 1
+        # No-good cuts exclude exact earlier assignments, NOT guarantee Pareto optimality.
+        for previous in excluded_solutions or []:
+            problem += pulp.lpSum(assignment[s, p] for s, p in previous) <= len(students) - 1
+
+        rank_limit = max((pr.rank for s in students for pr in s.preferences), default=0)
+        # The secondary weight is too small to outweigh a discrete preference
+        # step in preference-first runs (for SKILL_FIT it is a soft tie-breaker).
+        epsilon = 1.0 / (2 * len(students) * max(rank_limit, 1))
+        def utility(s: models.Student, p: models.Project) -> float:
+            primary = self.calculate_cost_or_utility(s, p, rank_limit)
+            if self.name == "PREFERENCE":
+                return primary + epsilon * _skill_score(s, p)
+            if self.name == "SKILL_FIT":
+                return primary + epsilon * _preference_score(s, p, rank_limit)
+            return primary
+        objective = pulp.lpSum(
+            utility(s, p) * assignment[s.id, p.id]
+            for s in students for p in projects
         )
+        if self.name == "BALANCED":
+            worst = pulp.LpVariable("worst_rank", lowBound=0, cat="Integer")
+            for s in students:
+                for p in projects:
+                    rank = s.get_preference_rank(p.id) or (rank_limit + 1)
+                    problem += worst >= rank * assignment[s.id, p.id]
+            objective -= (1.0 / max(rank_limit + 1, 1)) * worst
+        problem += objective
+
+        try:
+            problem.solve(pulp.PULP_CBC_CMD(msg=False, timeLimit=30))
+        except Exception as exc:
+            return "ERROR", [], None, {"message": str(exc), "solve_time_seconds": time.monotonic() - started}
+        status = pulp.LpStatus[problem.status]
+        info = {
+            "solver_status": status,
+            "solve_time_seconds": round(time.monotonic() - started, 4),
+            "constraints_count": len(problem.constraints),
+            "variables_count": len(problem.variables()),
+        }
+        # Only return proven optimal allocations. A time limit without an
+        # optimality certificate is not the same as mathematical infeasibility.
+        if status != "Optimal":
+            return status, [], None, info
+        fixed_pairs = {(fa.student_id, fa.project_id) for fa in fixed_assignments or []}
+        allocations: list[models.Assignment] = []
+        for student in students:
+            selected = [p for p in projects if pulp.value(assignment[student.id, p.id]) > 0.5]
+            if len(selected) != 1:
+                return "ERROR", [], None, {**info, "message": "Solver returned incomplete allocation."}
+            project = selected[0]
+            fit, unmet = metrics.calculate_assignment_skill_fit(student, project)
+            allocations.append(
+                models.Assignment(
+                    student_id=student.id,
+                    project_id=project.id,
+                    is_fixed=(student.id, project.id) in fixed_pairs,
+                    preference_rank=student.get_preference_rank(project.id),
+                    skill_fit_score=fit,
+                    unmet_requirements=unmet,
+                )
+            )
+        return status, allocations, float(pulp.value(problem.objective) or 0.0), info
+
+
+def _preference_score(student: models.Student, project: models.Project, max_preferences: int) -> float:
+    rank = student.get_preference_rank(project.id)
+    if rank is None or max_preferences < 1:
+        return 0.0
+    return max(0.0, (max_preferences + 1 - rank) / max_preferences)
+
+
+def _skill_score(student: models.Student, project: models.Project) -> float:
+    fit, _ = metrics.calculate_assignment_skill_fit(student, project)
+    return fit
+
+
+class PreferenceOrientedSolver(AssignmentStrategy):
+    def __init__(self) -> None:
+        super().__init__("PREFERENCE", "Prioritize student preference rankings")
+
+    def calculate_cost_or_utility(self, student: models.Student, project: models.Project, max_preferences: int) -> float:
+        return _preference_score(student, project, max_preferences)
+
+
+class SkillFitOrientedSolver(AssignmentStrategy):
+    def __init__(self) -> None:
+        super().__init__("SKILL_FIT", "Prioritize project skill alignment")
+
+    def calculate_cost_or_utility(self, student: models.Student, project: models.Project, max_preferences: int) -> float:
+        return _skill_score(student, project)
+
+
+class BalancedTradeoffSolver(AssignmentStrategy):
+    def __init__(self) -> None:
+        super().__init__("BALANCED", "Balance preferences, skills and worst rank")
+
+    def calculate_cost_or_utility(self, student: models.Student, project: models.Project, max_preferences: int) -> float:
+        return 0.5 * _preference_score(student, project, max_preferences) + 0.5 * _skill_score(student, project)
 
 
 class AssignmentEngine(contract.AssignmentEngineContract):
@@ -107,7 +229,9 @@ class AssignmentEngine(contract.AssignmentEngineContract):
             run_repo if run_repo is not None else repositories.RunRepository()
         )
         self.strategies: dict[str, AssignmentStrategy] = {
-            # Team B: Instantiate and register your custom strategies here
+            "PREFERENCE": PreferenceOrientedSolver(),
+            "SKILL_FIT": SkillFitOrientedSolver(),
+            "BALANCED": BalancedTradeoffSolver(),
         }
 
     def validate_inputs(
@@ -127,39 +251,146 @@ class AssignmentEngine(contract.AssignmentEngineContract):
             skills=request.skills,
             fixed_assignments=request.fixed_assignments,
         )
+        errors = list(val_result.errors)
+        if request.strategy_key not in SUPPORTED_STRATEGY_KEYS:
+            errors.append(
+                f"Unknown strategy '{request.strategy_key}'; expected one "
+                f"of {', '.join(SUPPORTED_STRATEGY_KEYS)}."
+            )
+        if not 1 <= request.max_alternatives <= MAX_ALTERNATIVES_LIMIT:
+            errors.append(
+                f"Requested alternatives ({request.max_alternatives}) must "
+                f"be between 1 and {MAX_ALTERNATIVES_LIMIT}."
+            )
         return contract.ValidationOutcome(
-            is_valid=val_result.is_valid,
+            is_valid=not errors,
             is_feasible=val_result.is_feasible,
-            errors=list(val_result.errors),
+            errors=errors,
             warnings=list(val_result.warnings),
             infeasibility_reasons=list(val_result.infeasibility_reasons),
         )
 
-    def execute_run(
-        self, request: contract.RunRequest
-    ) -> models.AssignmentRun:
-        """Executes the assignment algorithm, calculates metrics, and persists run.
+    def execute_run(self, request: contract.RunRequest) -> models.AssignmentRun:
+        """Validate, solve for alternatives, compute indicators and persist run.
 
-        In accordance with Section 8 of the specification, Team B must:
-        1. Synchronize entities to maintain relational integrity.
-        2. Validate cohort feasibility.
-        3. Run assignment solver(s) to generate one or more distinct alternatives.
-        4. Calculate indicators for each alternative using app.engine.metrics.
-        5. Persist run and solutions via self.run_repo.
-        6. Return populated models.AssignmentRun.
-
-        Args:
-            request: The run request containing students, projects, etc.
-
-        Returns:
-            The created AssignmentRun populated with alternative solutions.
-
-        Raises:
-            NotImplementedError: To be implemented by Team B.
+        Implementation is provisional pending instructor approval of ILP/CBC
+        and the interpretation of mandatory skills.
         """
-        raise NotImplementedError(
-            "TODO (Team B): Implement execute_run in app/engine/solvers.py"
+        # Direct engine use (e.g., unit tests) does not call Flask's create_app().
+        # Initialize the same database used by this engine before persisting data.
+        db = self.run_repo.db
+        db.initialize_schema()
+
+        run = models.AssignmentRun(
+            id=str(uuid.uuid4()),
+            configuration={
+                "primary_strategy": request.strategy_key,
+                "max_alternatives": request.max_alternatives,
+                "notes": request.notes,
+                "engine": "ILP_CBC_PROVISIONAL",
+            },
         )
+        outcome = self.validate_inputs(request)
+        if not outcome.is_feasible:
+            run.status = contract.RunStatus.INFEASIBLE.value
+            run.diagnostics = {"solver_status": "PRECHECK_INFEASIBLE", "reasons": outcome.infeasibility_reasons}
+            self.run_repo.save_run(run)
+            return run
+        if not outcome.is_valid:
+            run.status = contract.RunStatus.INVALID_INPUT.value
+            run.diagnostics = {"solver_status": "INVALID_INPUT", "errors": outcome.errors}
+            self.run_repo.save_run(run)
+            return run
+
+        # Database FK order: skills -> projects -> students -> locks -> runs.
+        # An omitted catalog should not cause FK errors when skills are present
+        # in student or project input. Add unnamed catalog entries as needed.
+        catalog = {sk.id: sk for sk in request.skills or []}
+        for student in request.students:
+            for skill_id in student.skills:
+                catalog.setdefault(skill_id, models.Skill(id=skill_id, name=f"Skill: {skill_id}"))
+        for project in request.projects:
+            for req in project.requirements:
+                catalog.setdefault(req.skill_id, models.Skill(id=req.skill_id, name=f"Skill: {req.skill_id}"))
+        try:
+            for sk in catalog.values():
+                repositories.SkillRepository(db).save(sk)
+            for project in request.projects:
+                repositories.ProjectRepository(db).save(project)
+            for student in request.students:
+                # A level of zero means "not possessed" in the domain model;
+                # omit it from student_skills because SQLite requires level>=1.
+                stored = dataclasses.replace(
+                    student, skills={k: v for k, v in student.skills.items() if v > 0}
+                )
+                repositories.StudentRepository(db).save(stored)
+            for fa in {
+                (f.student_id, f.project_id): f
+                for f in request.fixed_assignments or []
+            }.values():
+                repositories.FixedAssignmentRepository(db).save(fa)
+        except sqlite3.IntegrityError as exc:
+            run.status = contract.RunStatus.INVALID_INPUT.value
+            run.diagnostics = {"solver_status": "PERSISTENCE_INPUT_ERROR", "errors": [str(exc)]}
+            self.run_repo.save_run(run)
+            return run
+
+        sequence = [request.strategy_key] + [
+            key for key in SUPPORTED_STRATEGY_KEYS if key != request.strategy_key
+        ]
+        earlier: list[list[tuple[str, str]]] = []
+        for index in range(request.max_alternatives):
+            key = sequence[index % len(sequence)]
+            strategy = self.strategies[key]
+            try:
+                status, assignments, value, diagnostic = strategy.solve(
+                    request.students, request.projects, request.fixed_assignments, earlier
+                )
+            except ImportError as exc:
+                run.status = contract.RunStatus.FAILED.value
+                run.diagnostics = {"solver_status": "DEPENDENCY_MISSING", "error": str(exc)}
+                break
+            except Exception as exc:
+                logging.exception("Team B solver crashed")
+                run.status = contract.RunStatus.FAILED.value
+                run.diagnostics = {"solver_status": "ERROR", "error": str(exc)}
+                break
+            if status == "Infeasible":
+                # If no solution, whole run infeasible; otherwise there simply
+                # aren't any more distinct feasible alternatives.
+                if not run.solutions:
+                    run.status = contract.RunStatus.INFEASIBLE.value
+                    run.diagnostics = {"solver_status": status, "reasons": ["The ILP has no feasible allocation."], **diagnostic}
+                break
+            if status != "Optimal":
+                run.status = contract.RunStatus.FAILED.value
+                run.diagnostics = {"solver_status": status, **diagnostic}
+                break
+            indicators = metrics.compute_solution_indicators(
+                request.students, request.projects, assignments, request.fixed_assignments
+            )
+            if not indicators["feasibility"]["is_feasible"]:
+                run.status = contract.RunStatus.FAILED.value
+                run.diagnostics = {"solver_status": "INVALID_SOLUTION", "violations": indicators["feasibility"]["violations"]}
+                break
+            run.solutions.append(
+                models.Solution(
+                    id=str(uuid.uuid4()), run_id=run.id,
+                    alternative_number=len(run.solutions) + 1,
+                    strategy_name=key, objective_value=value,
+                    assignments=assignments, indicators=indicators,
+                    diagnostics=diagnostic,
+                )
+            )
+            earlier.append([(a.student_id, a.project_id) for a in assignments])
+
+        if run.solutions and run.status == "PENDING":
+            run.status = contract.RunStatus.COMPLETED.value
+        run.diagnostics.setdefault("solver_status", "Optimal" if run.solutions else "NO_SOLUTION")
+        run.diagnostics["distinct_alternatives"] = len(run.solutions)
+        run.diagnostics["requested_alternatives"] = request.max_alternatives
+        self.run_repo.save_run(run)
+        return run
 
     def run_assignment(
         self,
