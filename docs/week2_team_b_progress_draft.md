@@ -43,9 +43,17 @@ The three expected failures refer to Team A UI functions not yet integrated into
 101 passed, 3 xpassed in 1.12s
 ```
 
-All active tests passed and no failures remained. The three `xpassed` tests were old Team A starter tests still marked `xfail`; inspection found they had no assertions and therefore did not establish behavior. A follow-up test-only change removes these obsolete markers and adds assertions for skill create/delete, project create/edit/delete, and rendering two real solution alternatives. **The strengthened tests still require a fresh Mac run before any updated total is claimed.**
+All active tests passed and no failures remained. The three `xpassed` tests were old Team A starter tests still marked `xfail`; inspection found they had no assertions and therefore did not establish behavior. A follow-up test-only change removed these obsolete markers and added assertions for skill create/delete, project create/edit/delete, and rendering two real solution alternatives. **The strengthened tests have now been verified successfully on Jakob's Mac.**
 
 The earlier combined run had failed in the side-by-side comparison template because per-student allocation changes did not include `rank_delta` and matching project ID aliases. The integration branch now supplies these fields, handles unranked allocations explicitly, and has added comparison regressions. A focused subsequent run completed with `10 passed`.
+
+**Final strengthened integration-suite result (21 October 2026):** After updating to `integration/week2` commit `a6b2f4b` and running `python -m pytest -q` in Jakob's macOS Python 3.13 virtual environment:
+
+```
+104 passed in 95.32s (0:01:35)
+```
+
+This run has **zero failed, zero xfailed, and zero xpassed tests**. It covers the integrated code and the strengthened Team A workflows, including real solver output used in the comparison view. The previous `101 passed, 3 xpassed` result above is retained to document the progression of the tests.
 
 **Still to verify manually with both teams:** End-to-end Flask UI walkthrough of real alternatives, recommendations, project/skill CRUD, preference and capacity handling, and meaningful comparison labels. Automated checks alone do not confirm the user experience.
 
@@ -54,7 +62,7 @@ The earlier combined run had failed in the side-by-side comparison template beca
 1. **Instructor approval:** ILP/PuLP method approval and whether mandatory skills are required at the project-team or individual-student level are still awaiting a response from Julio. The relevant constraint is isolated for adjustment.
 2. **Fairness interpretation:** The mean preference rank covers ranked allocations; unranked allocations are counted separately. Consider both when evaluating student outcomes.
 3. **Alternative quality:** No-good cuts guarantee different feasible allocations; they do not by themselves guarantee the full Pareto frontier.
-4. **Integration validation:** The combined branch has passed automated tests but still needs a reproducible manual Flask UI demonstration and a fresh test run after strengthening three previously assertion-free UI tests.
+4. **Integration validation:** All 104 automated tests pass on the combined branch. A reproducible manual Flask UI demonstration and both teams' peer review remain outstanding.
 5. **Data integrity and CRUD:** Team A noted that deleting linked projects/skills can remove related preferences, requirements, or fixed allocations; review warning/confirmation behavior before final demonstration.
 
 ## 4. Next actions and Week 3 outlook
@@ -65,4 +73,4 @@ Week 3 (2 November): complete all project edge cases, finish the analytical note
 
 ---
 
-**REPORT EDITOR NOTE: DRAFT ONLY.** Team A must confirm its contribution and the group should add fresh strengthened-test results, the manual UI check, instructor response if received, and final submission decisions before converting this into the Canvas PDF.
+**REPORT EDITOR NOTE: DRAFT ONLY.** Team A must confirm its contribution and the group should add the manual UI check, instructor response if received, and final submission decisions before converting this into the Canvas PDF.
