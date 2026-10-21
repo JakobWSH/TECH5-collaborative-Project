@@ -61,15 +61,13 @@ def test_full_lifecycle_integration(tmp_path: pathlib.Path) -> None:
     assert b"Calculated Evidence" in rec_view.data
     assert b"Policy Advice" in rec_view.data
 
-    # Step 6: Component A renders side-by-side solution comparison via Engine
-    try:
-        comp_view = client.get(f"/compare?sol1={sol1_id}&sol2={sol2_id}")
-        assert comp_view.status_code == 200
-        assert b"Side-by-Side Solution Comparison" in comp_view.data
-        assert b"Trade-off Findings" in comp_view.data
-    except NotImplementedError:
-        # Expected in Starter Carcass pending Team A compare implementation
-        pass
+    # Step 6: Real engine comparison must render without missing-field errors.
+    comp_view = client.get(f"/compare?sol1={sol1_id}&sol2={sol2_id}")
+    assert comp_view.status_code == 200
+    assert b"Side-by-Side Solution Comparison" in comp_view.data
+    assert b"Trade-off Findings" in comp_view.data
+    assert b"Team A Starter Carcass" not in comp_view.data
+    assert b"Detailed Allocation Shifts" in comp_view.data
 
     # Step 7: Introduce Fixed Assignment (lock S02 to P2) and trigger rerun
     lock_res = client.post(
