@@ -396,8 +396,16 @@ def compare_two_solutions(
                 "student_id": sid,
                 "project_a": proj_a,
                 "project_b": proj_b,
+                # Explicit aliases and rank delta used by Team A's comparison UI.
+                "project_a_id": proj_a,
+                "project_b_id": proj_b,
                 "rank_a": rank_a,
                 "rank_b": rank_b,
+                "rank_delta": (
+                    rank_b - rank_a
+                    if rank_a is not None and rank_b is not None
+                    else None
+                ),
                 "skill_fit_a": (
                     a_assign.skill_fit_score if a_assign else None
                 ),
