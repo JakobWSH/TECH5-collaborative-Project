@@ -10,12 +10,6 @@
   </div>
 
   <div class="card-body">
-    <!-- TODO (Team A): Implement Project Creation/Edit Form -->
-    <div class="alert alert-info" style="margin-bottom: 1.5rem;">
-      <strong>Team A Starter Carcass:</strong>
-      Implement the form fields below to capture project attributes (ID, title, description, min/max capacities)
-      and the project skill requirements matrix (proficiency levels 1–5 and mandatory constraint flags).
-    </div>
 
     <form action="{% if project %}{{ url_for('visualization_web.update_project', project_id=project.id) }}{% else %}{{ url_for('visualization_web.create_project') }}{% endif %}" method="POST">
       <div class="grid-2">
@@ -67,17 +61,18 @@
               </tr>
             </thead>
             <tbody>
-              {% for sk in skills %}
-                <tr>
-                  <td><strong>{{ sk.name }}</strong> (<code>{{ sk.id }}</code>)</td>
-                  <td style="width: 150px;">
-                    <input type="number" name="req_level_{{ sk.id }}" min="0" max="5" class="form-control" value="0">
-                  </td>
-                  <td style="text-align: center; width: 150px;">
-                    <input type="checkbox" name="req_mand_{{ sk.id }}" value="1">
-                  </td>
-                </tr>
-              {% endfor %}
+                  {% for sk in skills %}
+                   {% set req = (project.requirements | selectattr("skill_id", "equalto", sk.id) | first) if project else none %}
+                   <tr>
+                     <td><strong>{{ sk.name }}</strong> (<code>{{ sk.id }}</code>)</td>
+                     <td style="width: 150px;">
+                       <input type="number" name="req_level_{{ sk.id }}" min="0" max="5" class="form-control" value="{{ req.minimum_level if req else 0 }}">
+                     </td>
+                     <td style="text-align: center; width: 150px;">
+                       <input type="checkbox" name="req_mand_{{ sk.id }}" value="1" {% if req and req.is_mandatory %}checked{% endif %}>
+                     </td>
+                   </tr>
+                 {% endfor %}
             </tbody>
           </table>
         </div>

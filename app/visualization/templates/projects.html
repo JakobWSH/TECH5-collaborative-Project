@@ -19,12 +19,6 @@
   </div>
 
   <div class="card-body">
-    <!-- TODO (Team A): Implement Project Catalog Table and Capacity Displays -->
-    <div class="alert alert-info" style="margin-bottom: 1.5rem;">
-      <strong>Team A Starter Carcass:</strong>
-      Implement the project table below to display all registered semester projects,
-      their min/max capacity quotas, skill requirements (with mandatory badges), and edit/delete actions.
-    </div>
 
     <div class="table-responsive">
       <table class="data-table">
@@ -55,9 +49,13 @@
                   </span>
                 </td>
                 <td>
-                  <!-- TODO (Team A): Render skill requirement badges (mandatory vs optional) -->
                   {% if p.requirements %}
-                    <span class="badge badge-primary">{{ p.requirements|length }} requirements</span>
+                    {% for r in p.requirements %}
+                      {% set sk = skills | selectattr("id", "equalto", r.skill_id) | first %}
+                      <span class="badge {{ 'badge-danger' if r.is_mandatory else 'badge-secondary' }}" style="margin: 0.1rem;">
+                        {{ sk.name if sk else r.skill_id }} &ge; {{ r.minimum_level }}{% if r.is_mandatory %} (mandatory){% endif %}
+                      </span>
+                    {% endfor %}
                   {% else %}
                     <span style="color: var(--text-muted); font-style: italic;">None</span>
                   {% endif %}
