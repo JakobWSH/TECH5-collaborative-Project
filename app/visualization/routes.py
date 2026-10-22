@@ -985,6 +985,8 @@ def compare_solutions() -> Any:
         sol_a=sol_a,
         sol_b=sol_b,
         comparison=comparison,
+        students={s.id: s for s in repositories.StudentRepository().list_all()},
+        projects={p.id: p for p in repositories.ProjectRepository().list_all()},
     )
 
 

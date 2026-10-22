@@ -114,10 +114,10 @@
           <tbody>
             {% for c in comparison.changed_assignments %}
               <tr>
-                <td><strong>{{ c.student_id }}</strong></td>
-                <td>{{ c.project_a_id or "Not assigned" }}</td>
+                <td><strong>{{ students[c.student_id].display_name if c.student_id in students else c.student_id }}</strong></td>
+                <td>{{ projects[c.project_a_id].title if c.project_a_id in projects else (c.project_a_id or "Not assigned") }}</td>
                 <td>{% if c.rank_a is none %}Unranked{% else %}Choice #{{ c.rank_a }}{% endif %}</td>
-                <td>{{ c.project_b_id or "Not assigned" }}</td>
+                <td>{{ projects[c.project_b_id].title if c.project_b_id in projects else (c.project_b_id or "Not assigned") }}</td>
                 <td>{% if c.rank_b is none %}Unranked{% else %}Choice #{{ c.rank_b }}{% endif %}</td>
                 <td>
                   {% if c.rank_delta is not none and c.rank_delta < 0 %}
