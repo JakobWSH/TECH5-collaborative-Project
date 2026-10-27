@@ -4,14 +4,14 @@
 **Canvas deadline:** Tuesday, 27 October 2026 at 23:59.  
 **Repository:** https://github.com/JakobWSH/TECH5-collaborative-Project  
 **Integration branch:** https://github.com/JakobWSH/TECH5-collaborative-Project/tree/integration/week2  
-**Status:** Both teams' work merged on integration branch; combined automated tests have no unexpected failures, while UI walkthrough, peer review, instructor approval, and final report remain pending.
+**Status:** Both teams' work merged; 104 integrated tests passed; the ILP/PuLP method was approved by Julio Goez on 22 October 2026. Manual walkthrough and peer review remain pending. The mandatory-skill interpretation was not explicitly resolved.
 
 ## 1. Work division and implementation decisions
 
 **Team B — Assignment engine and metrics (Group 14).**
-- Developed the provisional binary integer linear programming (ILP) assignment engine in `app/engine/solvers.py`, using the open-source PuLP/CBC solver (`pulp==2.9.0`).
+- Developed the instructor-approved binary integer linear programming (ILP) assignment engine in `app/engine/solvers.py`, using the open-source PuLP/CBC solver (`pulp==2.9.0`).
 - Implemented the `PREFERENCE`, `SKILL_FIT`, and `BALANCED` strategy objectives; one assignment per student, project minimum/maximum capacity limits, fixed allocations, and integer no-good cuts to produce distinct feasible alternatives.
-- Currently assumes a staffed project must include at least one student who meets each mandatory skill requirement. **This interpretation and use of ILP remain subject to professor approval.** Alternatives are distinct, not claimed to all be Pareto-efficient.
+- Currently assumes a staffed project must include at least one student who meets each mandatory skill requirement. **Julio approved the proposed ILP approach on 22 October 2026; his reply did not explicitly decide whether mandatory skills apply per student or per staffed project team.** Alternatives are distinct, not claimed to all be Pareto-efficient.
 - Implemented skill-fit scoring, Gini inequality, solution feasibility/efficiency/fairness/capacity indicators, and comparisons in `app/engine/metrics.py`.
 - Integrated input-validation enhancements and regression tests. In particular, Faisal's audit identified that an optional project with no qualified student must be excluded from usable capacity before deciding whether exact allocation is feasible.
 - Added direct engine database initialization, allowing the engine to run independently of Flask initialization, and registered concrete solver strategies.
@@ -59,7 +59,7 @@ This run has **zero failed, zero xfailed, and zero xpassed tests**. It covers th
 
 ## 3. Issues, limitations, and decisions to resolve
 
-1. **Instructor approval:** ILP/PuLP method approval and whether mandatory skills are required at the project-team or individual-student level are still awaiting a response from Julio. The relevant constraint is isolated for adjustment.
+1. **Instructor method approval:** Julio Goez replied on **22 October 2026** that the proposed ILP approach is good, adding that Pyomo may be used instead of PuLP if preferred; switching is **not required**. His reply did **not explicitly clarify** the mandatory-skill interpretation. The current solver requires at least one qualified team member for each mandatory project skill, and the relevant constraint remains isolated for adjustment.
 2. **Fairness interpretation:** The mean preference rank covers ranked allocations; unranked allocations are counted separately. Consider both when evaluating student outcomes.
 3. **Alternative quality:** No-good cuts guarantee different feasible allocations; they do not by themselves guarantee the full Pareto frontier.
 4. **Integration validation:** All 104 automated tests pass on the combined branch. A reproducible manual Flask UI demonstration and both teams' peer review remain outstanding.
@@ -73,4 +73,4 @@ Week 3 (2 November): complete all project edge cases, finish the analytical note
 
 ---
 
-**REPORT EDITOR NOTE: DRAFT ONLY.** Team A must confirm its contribution and the group should add the manual UI check, instructor response if received, and final submission decisions before converting this into the Canvas PDF.
+**REPORT EDITOR NOTE:** The technical decisions, 104-test evidence and instructor's ILP approval are documented. Team A should confirm its stated contribution and the groups should review any remaining manual UI checks before treating the integration PR as final. The Week 2 Canvas report itself may be submitted with those limitations transparently disclosed.
