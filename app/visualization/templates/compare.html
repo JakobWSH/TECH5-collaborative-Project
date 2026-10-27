@@ -8,14 +8,32 @@
     <div>
       <h2 class="card-title">Side-by-Side Solution Comparison</h2>
       <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.2rem;">
-        Compare two generated alternative allocations to reveal trade-offs between student preference satisfaction and project skill fit.
+        Compare multi-solution alternatives and evaluate transparent trade-offs between student preference satisfaction and project skill fit.
       </p>
     </div>
+    {% if active_run %}
+      <a href="{{ url_for('visualization_web.view_run', run_id=active_run.id) }}" class="btn btn-sm btn-secondary">
+        &larr; View Run Overview
+      </a>
+    {% endif %}
   </div>
 
   <div class="card-body">
-    <!-- Solution Selector Form -->
+    <!-- Solution & Run Selector Form -->
     <form action="{{ url_for('visualization_web.compare_solutions') }}" method="GET" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 1.5rem; background: #f8fafc; border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
+      {% if all_runs|length > 1 %}
+        <div style="flex: 1; min-width: 220px;">
+          <label class="form-label" for="run_id">Optimization Run:</label>
+          <select name="run_id" id="run_id" class="form-control" onchange="this.form.submit()">
+            {% for r in all_runs %}
+              <option value="{{ r.id }}" {% if active_run and active_run.id == r.id %}selected{% endif %}>
+                Run {{ r.id[:8] }} &ndash; {{ r.status }} ({{ r.solutions|length }} alts, {{ r.created_at[:10] }})
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+      {% endif %}
+
       <div style="flex: 1; min-width: 250px;">
         <label class="form-label" for="sol1">Baseline Solution (A):</label>
         <select name="sol1" id="sol1" class="form-control">
@@ -43,7 +61,166 @@
       </button>
     </form>
 
+    <!-- 1. Cohort Multi-Alternative Overview Matrix -->
+    {% if run_solutions and run_solutions|length >= 2 %}
+      <div style="margin-bottom: 2rem; background: #ffffff; border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden;">
+        <div style="padding: 0.85rem 1.25rem; background: #f8fafc; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h3 style="font-size: 1.05rem; font-weight: 700; margin: 0;">
+              Cohort Solutions Comparison Matrix ({{ run_solutions|length }} Alternatives)
+            </h3>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">
+              Run <code>{{ active_run.id[:8] if active_run else '' }}</code> &bull; Multi-solution KPI comparison across efficiency, fairness, and capacity
+            </span>
+          </div>
+          {% if active_run %}
+            <a href="{{ url_for('visualization_web.view_recommendations', run_id=active_run.id) }}" class="btn btn-sm btn-primary">
+              View Detailed Recommendations &rarr;
+            </a>
+          {% endif %}
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table" style="margin-bottom: 0;">
+            <thead>
+              <tr>
+                <th style="min-width: 180px;">Analytical Indicator</th>
+                {% for s in run_solutions %}
+                  <th style="text-align: center; {% if sol_a and sol_a.id == s.id %}background: #eff6ff; border-left: 2px solid var(--primary);{% elif sol_b and sol_b.id == s.id %}background: #ecfdf5; border-left: 2px solid var(--success);{% endif %}">
+                    Alternative #{{ s.alternative_number }}
+                    <div style="margin-top: 0.2rem;">
+                      <span class="badge {% if s.strategy_name == 'PREFERENCE' %}badge-success{% elif s.strategy_name == 'SKILL_FIT' %}badge-primary{% else %}badge-secondary{% endif %}" style="font-size: 0.75rem;">
+                        {{ s.strategy_name }}
+                      </span>
+                    </div>
+                  </th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Average Skill Fit (%)</strong></td>
+                {% for s in run_solutions %}
+                  {% set eff = s.indicators.get('efficiency', {}) %}
+                  <td style="text-align: center; font-weight: 700; color: var(--primary);">
+                    {{ (eff.get('mean_skill_fit', 0.0) * 100)|round(1) }}%
+                  </td>
+                {% endfor %}
+              </tr>
+              <tr>
+                <td><strong>Average Preference Rank</strong> (lower is better)</td>
+                {% for s in run_solutions %}
+                  {% set fair = s.indicators.get('fairness', {}) %}
+                  <td style="text-align: center; font-weight: 700; color: var(--success);">
+                    #{{ fair.get('mean_rank', 'N/A') }}
+                  </td>
+                {% endfor %}
+              </tr>
+              <tr>
+                <td><strong>Worst Preference Rank</strong></td>
+                {% for s in run_solutions %}
+                  {% set fair = s.indicators.get('fairness', {}) %}
+                  <td style="text-align: center; color: var(--warning); font-weight: 600;">
+                    #{{ fair.get('worst_rank', 'N/A') }}
+                  </td>
+                {% endfor %}
+              </tr>
+              <tr>
+                <td><strong>Students Outside Stated Preferences</strong></td>
+                {% for s in run_solutions %}
+                  {% set fair = s.indicators.get('fairness', {}) %}
+                  <td style="text-align: center;">
+                    {% if fair.get('unranked_count', 0) > 0 %}
+                      <span class="badge badge-danger">{{ fair.get('unranked_count') }} unranked</span>
+                    {% else %}
+                      <span class="badge badge-success">0 unranked</span>
+                    {% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+              <tr>
+                <td><strong>Rank Inequality (Gini)</strong> (0.0 = equality)</td>
+                {% for s in run_solutions %}
+                  {% set fair = s.indicators.get('fairness', {}) %}
+                  <td style="text-align: center; color: #475569;">
+                    {{ fair.get('rank_gini', 'N/A') }}
+                  </td>
+                {% endfor %}
+              </tr>
+              <tr>
+                <td><strong>Rank Variance</strong></td>
+                {% for s in run_solutions %}
+                  {% set fair = s.indicators.get('fairness', {}) %}
+                  <td style="text-align: center; color: var(--text-muted);">
+                    {{ fair.get('rank_variance', 'N/A') }}
+                  </td>
+                {% endfor %}
+              </tr>
+              <tr>
+                <td><strong>Unmet Soft Skill Requirements</strong></td>
+                {% for s in run_solutions %}
+                  {% set eff = s.indicators.get('efficiency', {}) %}
+                  <td style="text-align: center;">
+                    {{ eff.get('unmet_soft_requirements_count', 0) }}
+                  </td>
+                {% endfor %}
+              </tr>
+              <tr>
+                <td><strong>Policy Focus Recommendation</strong></td>
+                {% for s in run_solutions %}
+                  <td style="text-align: center; font-size: 0.82rem;">
+                    {% set matched_recs = run_recommendations | selectattr("recommended_solution_id", "equalto", s.id) | list %}
+                    {% if matched_recs %}
+                      {% for mr in matched_recs %}
+                        <div style="margin-bottom: 0.2rem;">
+                          <span class="badge badge-primary" style="font-size: 0.75rem;">
+                            &#9733; {{ mr.priority_focus.split(' ')[0] }}
+                          </span>
+                        </div>
+                      {% endfor %}
+                    {% else %}
+                      <span style="color: var(--text-muted); font-style: italic;">Balanced Alternative</span>
+                    {% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+              <tr>
+                <td><strong>Select for Pairwise Comparison</strong></td>
+                {% for s in run_solutions %}
+                  <td style="text-align: center;">
+                    <div style="display: flex; gap: 0.25rem; justify-content: center;">
+                      <a href="{{ url_for('visualization_web.compare_solutions', run_id=active_run.id, sol1=s.id, sol2=sol_b.id if sol_b else '') }}" class="btn btn-sm {% if sol_a and sol_a.id == s.id %}btn-primary{% else %}btn-secondary{% endif %}" style="padding: 0.2rem 0.4rem; font-size: 0.75rem;">
+                        Set as A
+                      </a>
+                      <a href="{{ url_for('visualization_web.compare_solutions', run_id=active_run.id, sol1=sol_a.id if sol_a else '', sol2=s.id) }}" class="btn btn-sm {% if sol_b and sol_b.id == s.id %}btn-success{% else %}btn-secondary{% endif %}" style="padding: 0.2rem 0.4rem; font-size: 0.75rem;">
+                        Set as B
+                      </a>
+                    </div>
+                  </td>
+                {% endfor %}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% elif run_solutions and run_solutions|length == 1 %}
+      <div class="alert alert-info" style="margin-bottom: 1.5rem;">
+        <strong>Single Feasible Solution:</strong>
+        Only 1 feasible solution exists for this run under current constraints. In compliance with decision-support principles, no artificial alternatives have been manufactured. You can adjust cohort preferences, project capacities, or fixed locks to explore trade-offs.
+      </div>
+    {% endif %}
+
+    <!-- 2. Pairwise Deep-Dive Comparison -->
     {% if comparison and sol_a and sol_b %}
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">
+        <h3 style="font-size: 1.2rem; font-weight: 700; margin: 0;">
+          Pairwise Trade-off Analysis: Solution A (Alt #{{ sol_a.alternative_number }}) vs Solution B (Alt #{{ sol_b.alternative_number }})
+        </h3>
+        <a href="{{ url_for('visualization_web.compare_solutions', sol1=sol_b.id, sol2=sol_a.id, run_id=active_run.id if active_run else '') }}" class="btn btn-sm btn-secondary">
+          &#8644; Swap A &amp; B
+        </a>
+      </div>
+
       <!-- Comparative KPI Deltas -->
       <div class="kpi-grid">
         <div class="kpi-card">
@@ -85,6 +262,88 @@
         </div>
       </div>
 
+      <!-- Structured Trade-Off Findings: What Improves vs What Becomes Worse (Section 6) -->
+      {% if tradeoff_rec %}
+        <div class="grid-2" style="margin-bottom: 1.5rem;">
+          <!-- What Improves -->
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-md); padding: 1.25rem;">
+            <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--success); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">
+              &#9650; What Improves in Solution B?
+            </h4>
+            <ul style="margin-left: 1.25rem; font-size: 0.92rem; color: #166534;">
+              {% for item in tradeoff_rec.what_improves %}
+                <li style="margin-bottom: 0.35rem;">{{ item }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+
+          <!-- What Becomes Worse -->
+          <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius-md); padding: 1.25rem;">
+            <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--danger); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">
+              &#9660; What Becomes Worse in Solution B?
+            </h4>
+            <ul style="margin-left: 1.25rem; font-size: 0.92rem; color: #991b1b;">
+              {% for item in tradeoff_rec.what_becomes_worse %}
+                <li style="margin-bottom: 0.35rem;">{{ item }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+
+        <!-- Transparent Recommendation & Decision Advice (Section 6 & 9) -->
+        <div class="card" style="border-left: 5px solid var(--primary); margin-bottom: 1.5rem;">
+          <div class="card-header" style="background: #f8fafc;">
+            <div>
+              <span class="badge badge-primary" style="font-size: 0.8rem; margin-bottom: 0.2rem;">
+                Decision Recommendation
+              </span>
+              <h4 style="font-size: 1.1rem; font-weight: 700; margin: 0.2rem 0 0 0;">
+                Which Alternative Would We Recommend, and Why?
+              </h4>
+            </div>
+            <div>
+              <span class="badge badge-secondary" style="font-size: 0.85rem;">
+                {{ tradeoff_rec.recommended_choice }}
+              </span>
+            </div>
+          </div>
+
+          <div class="card-body">
+            <div class="grid-2">
+              <!-- Objective Calculated Evidence -->
+              <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 1rem;">
+                <strong style="font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">
+                  &#128202; Calculated Evidence (Objective Facts)
+                </strong>
+                <ul style="margin-left: 1.25rem; margin-top: 0.5rem; font-size: 0.9rem; color: var(--text-main);">
+                  {% for ev in tradeoff_rec.evidence %}
+                    <li style="margin-bottom: 0.35rem;">{{ ev }}</li>
+                  {% endfor %}
+                </ul>
+                <div style="margin-top: 0.75rem; font-size: 0.82rem; color: var(--text-muted);">
+                  <strong>Cohort Impact:</strong> {{ tradeoff_rec.who_is_affected_summary }}
+                </div>
+              </div>
+
+              <!-- Actionable Policy Advice -->
+              <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 1rem; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                  <strong style="font-size: 0.85rem; color: var(--success); text-transform: uppercase; letter-spacing: 0.05em;">
+                    &#128161; Policy Advice & Justification
+                  </strong>
+                  <p style="margin-top: 0.5rem; font-size: 0.92rem; line-height: 1.6; color: var(--text-main);">
+                    {{ tradeoff_rec.advice }}
+                  </p>
+                </div>
+                <div style="margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px dashed var(--border-color); font-size: 0.8rem; color: var(--secondary);">
+                  <strong>Committee Guidance:</strong> Student satisfaction favors Alternative #{{ tradeoff_rec.recommended_for_student_satisfaction }}, whereas project deliverable skill coverage favors Alternative #{{ tradeoff_rec.recommended_for_skill_delivery }}.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+
       <!-- Trade-off Analytical Summary -->
       <div class="alert alert-info" style="margin-bottom: 1.5rem;">
         <strong>Trade-off Findings:</strong>
@@ -109,16 +368,48 @@
               <th>Solution B Project</th>
               <th>Solution B Rank</th>
               <th>Rank Shift (&Delta; Rank)</th>
+              {% if can_edit %}<th>Lock &amp; Rerun</th>{% endif %}
             </tr>
           </thead>
           <tbody>
             {% for c in comparison.changed_assignments %}
               <tr>
-                <td><strong>{{ students[c.student_id].display_name if c.student_id in students else c.student_id }}</strong></td>
-                <td>{{ projects[c.project_a_id].title if c.project_a_id in projects else (c.project_a_id or "Not assigned") }}</td>
-                <td>{% if c.rank_a is none %}Unranked{% else %}Choice #{{ c.rank_a }}{% endif %}</td>
-                <td>{{ projects[c.project_b_id].title if c.project_b_id in projects else (c.project_b_id or "Not assigned") }}</td>
-                <td>{% if c.rank_b is none %}Unranked{% else %}Choice #{{ c.rank_b }}{% endif %}</td>
+                <td>
+                  <strong>{{ students[c.student_id].display_name if c.student_id in students else c.student_id }}</strong>
+                  <div style="font-size: 0.8rem; color: var(--text-muted);">
+                    ID: <code>{{ c.student_id }}</code>
+                  </div>
+                </td>
+                <td>
+                  <strong>{{ projects[c.project_a_id].title if c.project_a_id in projects else (c.project_a_id or "Not assigned") }}</strong>
+                  {% if c.project_a_id %}
+                    <div style="font-size: 0.8rem; color: var(--text-muted);"><code>{{ c.project_a_id }}</code></div>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if c.rank_a is none %}
+                    <span class="badge badge-secondary">Unranked</span>
+                  {% elif c.rank_a == 1 %}
+                    <span class="badge badge-success">Choice #1</span>
+                  {% else %}
+                    Choice #{{ c.rank_a }}
+                  {% endif %}
+                </td>
+                <td>
+                  <strong>{{ projects[c.project_b_id].title if c.project_b_id in projects else (c.project_b_id or "Not assigned") }}</strong>
+                  {% if c.project_b_id %}
+                    <div style="font-size: 0.8rem; color: var(--text-muted);"><code>{{ c.project_b_id }}</code></div>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if c.rank_b is none %}
+                    <span class="badge badge-secondary">Unranked</span>
+                  {% elif c.rank_b == 1 %}
+                    <span class="badge badge-success">Choice #1</span>
+                  {% else %}
+                    Choice #{{ c.rank_b }}
+                  {% endif %}
+                </td>
                 <td>
                   {% if c.rank_delta is not none and c.rank_delta < 0 %}
                     <span class="badge badge-success">&#9650; {{ c.rank_delta|abs }} ranks better</span>
@@ -134,6 +425,19 @@
                     <span class="badge badge-secondary">No rank change</span>
                   {% endif %}
                 </td>
+                {% if can_edit %}
+                  <td>
+                    {% if c.project_b_id %}
+                      <form action="{{ url_for('visualization_web.lock_and_rerun', solution_id=sol_b.id) }}" method="POST" style="margin: 0;">
+                        <input type="hidden" name="student_id" value="{{ c.student_id }}">
+                        <input type="hidden" name="project_id" value="{{ c.project_b_id }}">
+                        <button type="submit" class="btn btn-sm btn-secondary" title="Lock student to Project B and re-run optimization">
+                          Pin to B &rarr;
+                        </button>
+                      </form>
+                    {% endif %}
+                  </td>
+                {% endif %}
               </tr>
             {% endfor %}
           </tbody>

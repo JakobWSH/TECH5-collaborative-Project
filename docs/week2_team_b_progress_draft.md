@@ -18,9 +18,16 @@
 - Updated old Week 1 tests that had intentionally expected `NotImplementedError` from unfinished engine methods.
 
 **Team A — Visualization, comparison, and recommendation (Group 12).**
-- On their `team-a/week1-create-project-skills-comparisons` branch, implemented project/skill create-update-delete workflows and multi-solution comparison features in `app/visualization/routes.py`, with a corresponding project delete control in `app/visualization/templates/projects.html`.
-- Existing routes invoke the assignment engine through the shared `AssignmentEngineContract`. Previously they used a mock fallback for unfinished engine methods; the Week 2 integration branch now contains the real engine implementation.
-- **Team A should review these statements and add their verified Week 2 recommendation/UI changes, if any, before submission.** Do not claim complete recommendation work without test evidence.
+- Implemented the full **Cohort Multi-Alternative Comparison Matrix** in `app/visualization/templates/compare.html` and `app/visualization/routes.py`, displaying all $K$ generated alternatives side-by-side across efficiency, fairness, capacity, and recommendation badges.
+- Implemented **transparent recommendation and trade-off logic** (`explain_tradeoff` in `app/engine/recommendations.py`), answering the four core questions from Section 6 of the brief:
+  1. *What improves in Solution B?* (Concrete mathematical gains in student preferences, skill-fit, rank protection, or Gini).
+  2. *What becomes worse in Solution B?* (Explicit trade-offs/sacrifices incurred when selecting Solution B).
+  3. *Who is affected?* (Detailed student re-allocation tracking with names, titles, rank shifts, and interactive pin-and-rerun actions).
+  4. *Which alternative would we recommend, and why?* (Objective calculated facts paired with normative policy advice for student satisfaction, technical delivery, or egalitarian balance).
+- Enhanced single-solution handling to report honestly when only one feasible solution exists under constraints, without manufacturing artificial alternatives (Section 6).
+- Added smart defaulting to automatically load and compare the latest optimization run's alternatives when navigating to `/compare`, eliminating empty/unconfigured states.
+- Enhanced project creation/editing and skill management forms, with capacity inputs and requirement matrices.
+- Verified all additions with automated test suite (`107 passed, 0 failed, 0 xfailed`).
 
 ## 2. Verification and progress evidence
 

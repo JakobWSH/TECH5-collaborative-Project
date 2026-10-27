@@ -956,20 +956,52 @@ def clear_solutions() -> flask.Response:
 
 @web_bp.get("/compare")
 def compare_solutions() -> Any:
-    """Renders side-by-side comparative analysis of two solutions."""
-
+    """Renders multi-solution comparison and pairwise trade-off analysis."""
     run_repo = repositories.RunRepository()
-    
+    all_runs = run_repo.list_runs()
     all_solutions = [
-        sol for run in run_repo.list_runs() for sol in run.solutions
+        sol for run in all_runs for sol in run.solutions
     ]
+
+    run_id = flask.request.args.get("run_id", "")
     solution_a_id = flask.request.args.get("sol1", "")
     solution_b_id = flask.request.args.get("sol2", "")
 
+    active_run = None
+    if run_id:
+        active_run = run_repo.get_run(run_id)
+
+    # If no specific solution IDs are requested, default to the first two
+    # solutions of the active or most recent run that contains solutions.
+    if not solution_a_id and not solution_b_id:
+        candidate_run = active_run
+        if not candidate_run and all_runs:
+            for r in all_runs:
+                if r.solutions:
+                    candidate_run = r
+                    break
+        if candidate_run and candidate_run.solutions:
+            active_run = candidate_run
+            solution_a_id = candidate_run.solutions[0].id
+            if len(candidate_run.solutions) >= 2:
+                solution_b_id = candidate_run.solutions[1].id
+
     sol_a = run_repo.get_solution(solution_a_id) if solution_a_id else None
     sol_b = run_repo.get_solution(solution_b_id) if solution_b_id else None
-    
+
+    # Contextualize active run from solution A if not already identified
+    if not active_run and sol_a:
+        active_run = run_repo.get_run(sol_a.run_id)
+
+    run_solutions = active_run.solutions if active_run else []
+    run_recommendations = (
+        recommendations.generate_recommendations(run_solutions)
+        if run_solutions
+        else []
+    )
+
     comparison = None
+    tradeoff_rec = None
     if sol_a and sol_b:
         engine: contract.AssignmentEngineContract = solvers.AssignmentEngine()
         try:
@@ -978,13 +1010,21 @@ def compare_solutions() -> Any:
             comparison = mocks.MockAssignmentEngine().compare_solutions(
                 sol_a.id, sol_b.id
             )
+        tradeoff_rec = recommendations.explain_tradeoff(
+            sol_a, sol_b, comparison
+        )
 
     return flask.render_template(
         "compare.html",
+        all_runs=all_runs,
+        active_run=active_run,
+        run_solutions=run_solutions,
+        run_recommendations=run_recommendations,
         all_solutions=all_solutions,
         sol_a=sol_a,
         sol_b=sol_b,
         comparison=comparison,
+        tradeoff_rec=tradeoff_rec,
         students={s.id: s for s in repositories.StudentRepository().list_all()},
         projects={p.id: p for p in repositories.ProjectRepository().list_all()},
     )

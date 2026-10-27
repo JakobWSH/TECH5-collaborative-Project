@@ -78,7 +78,14 @@
     {% endif %}
 
     <!-- Retained Alternative Solutions -->
-    <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 1rem;">Generated Feasible Solutions</h3>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+      <h3 style="font-size: 1.2rem; font-weight: 700; margin: 0;">Generated Feasible Solutions</h3>
+      {% if run.solutions|length >= 2 %}
+        <a href="{{ url_for('visualization_web.compare_solutions', run_id=run.id) }}" class="btn btn-sm btn-primary">
+          Compare All Alternatives &rarr;
+        </a>
+      {% endif %}
+    </div>
 
     {% if run.solutions %}
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.25rem;">
