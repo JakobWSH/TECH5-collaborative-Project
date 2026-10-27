@@ -18,16 +18,12 @@
 - Updated old Week 1 tests that had intentionally expected `NotImplementedError` from unfinished engine methods.
 
 **Team A — Visualization, comparison, and recommendation (Group 12).**
-- Implemented the full **Cohort Multi-Alternative Comparison Matrix** in `app/visualization/templates/compare.html` and `app/visualization/routes.py`, displaying all $K$ generated alternatives side-by-side across efficiency, fairness, capacity, and recommendation badges.
-- Implemented **transparent recommendation and trade-off logic** (`explain_tradeoff` in `app/engine/recommendations.py`), answering the four core questions from Section 6 of the brief:
-  1. *What improves in Solution B?* (Concrete mathematical gains in student preferences, skill-fit, rank protection, or Gini).
-  2. *What becomes worse in Solution B?* (Explicit trade-offs/sacrifices incurred when selecting Solution B).
-  3. *Who is affected?* (Detailed student re-allocation tracking with names, titles, rank shifts, and interactive pin-and-rerun actions).
-  4. *Which alternative would we recommend, and why?* (Objective calculated facts paired with normative policy advice for student satisfaction, technical delivery, or egalitarian balance).
-- Enhanced single-solution handling to report honestly when only one feasible solution exists under constraints, without manufacturing artificial alternatives (Section 6).
-- Added smart defaulting to automatically load and compare the latest optimization run's alternatives when navigating to `/compare`, eliminating empty/unconfigured states.
-- Enhanced project creation/editing and skill management forms, with capacity inputs and requirement matrices.
-- Verified all additions with automated test suite (`107 passed, 0 failed, 0 xfailed`).
+- **Comparison of all alternatives:** `/compare` now shows a matrix of every alternative from a run side by side (skill fit, average and worst preference rank, students outside preferences, rank Gini and variance, unmet soft requirements) with the policy focus each alternative is recommended for (`compare.html`, `routes.py`). It opens the latest run by default.
+- **Trade-off explanation:** a new `explain_tradeoff` function (`app/engine/recommendations.py`) compares two selected alternatives and answers the four questions in Section 6 of the brief: what improves in B, what becomes worse, which students are affected (listed by name and project title, with an option to fix a student’s assignment and rerun), and which alternative is recommended for each priority, separating calculated evidence from policy advice.
+- **Only one feasible solution:** the comparison page says so explicitly instead of creating artificial alternatives.
+- **Data entry fixes:** the project edit form now keeps existing skill requirements when saved (previously they were cleared), and the Projects page lists each requirement with its minimum level, mandatory ones highlighted.
+- **Verification:** `python -m pytest` gives 107 passed, 0 failed on `team-a/week2-polish`, including new tests for the comparison and trade-off logic. Pull request into `integration/week2` opened for review.
+- **Known issues for Week 3:** round the Gini value in the matrix; the Recommendations page still calls the chosen alternative “mathematically optimal”, which overstates what generating K alternatives can show; warn before deletions that remove fixed assignments.
 
 ## 2. Verification and progress evidence
 
