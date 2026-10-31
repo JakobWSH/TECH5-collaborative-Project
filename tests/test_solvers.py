@@ -19,21 +19,6 @@ def test_assignment_engine_initialization() -> None:
     engine = solvers.AssignmentEngine()
     assert isinstance(engine, contract.AssignmentEngineContract)
     assert isinstance(engine.strategies, dict)
-    assert len(engine.strategies) == 0
-
-
-def test_assignment_engine_raises_not_implemented() -> None:
-    """Verifies that execute_run raises NotImplementedError for Team B."""
-    engine = solvers.AssignmentEngine()
-    benchmark = demo_data.get_standard_scenario()
-    request = contract.RunRequest(
-        students=benchmark["students"],
-        projects=benchmark["projects"],
-    )
-    with pytest.raises(NotImplementedError) as exc_info:
-        engine.execute_run(request)
-    assert "TODO (Team B)" in str(exc_info.value)
-
 
 @pytest.mark.xfail(
     raises=NotImplementedError,
