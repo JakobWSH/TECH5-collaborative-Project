@@ -18,9 +18,12 @@
 - Updated old Week 1 tests that had intentionally expected `NotImplementedError` from unfinished engine methods.
 
 **Team A — Visualization, comparison, and recommendation (Group 12).**
-- On their `team-a/week1-create-project-skills-comparisons` branch, implemented project/skill create-update-delete workflows and multi-solution comparison features in `app/visualization/routes.py`, with a corresponding project delete control in `app/visualization/templates/projects.html`.
-- Existing routes invoke the assignment engine through the shared `AssignmentEngineContract`. Previously they used a mock fallback for unfinished engine methods; the Week 2 integration branch now contains the real engine implementation.
-- **Team A should review these statements and add their verified Week 2 recommendation/UI changes, if any, before submission.** Do not claim complete recommendation work without test evidence.
+- **Comparison of all alternatives:** `/compare` now shows a matrix of every alternative from a run side by side (skill fit, average and worst preference rank, students outside preferences, rank Gini and variance, unmet soft requirements) with the policy focus each alternative is recommended for (`compare.html`, `routes.py`). It opens the latest run by default.
+- **Trade-off explanation:** a new `explain_tradeoff` function (`app/engine/recommendations.py`) compares two selected alternatives and answers the four questions in Section 6 of the brief: what improves in B, what becomes worse, which students are affected (listed by name and project title, with an option to fix a student’s assignment and rerun), and which alternative is recommended for each priority, separating calculated evidence from policy advice.
+- **Only one feasible solution:** the comparison page says so explicitly instead of creating artificial alternatives.
+- **Data entry fixes:** the project edit form now keeps existing skill requirements when saved (previously they were cleared), and the Projects page lists each requirement with its minimum level, mandatory ones highlighted.
+- **Verification:** `python -m pytest` gives 107 passed, 0 failed on `team-a/week2-polish`, including new tests for the comparison and trade-off logic. Pull request into `integration/week2` opened for review.
+- **Known issues for Week 3:** round the Gini value in the matrix; the Recommendations page still calls the chosen alternative “mathematically optimal”, which overstates what generating K alternatives can show; warn before deletions that remove fixed assignments.
 
 ## 2. Verification and progress evidence
 

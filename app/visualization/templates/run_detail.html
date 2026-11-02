@@ -78,7 +78,14 @@
     {% endif %}
 
     <!-- Retained Alternative Solutions -->
-    <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 1rem;">Generated Feasible Solutions</h3>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+      <h3 style="font-size: 1.2rem; font-weight: 700; margin: 0;">Generated Feasible Solutions</h3>
+      {% if run.solutions|length >= 2 %}
+        <a href="{{ url_for('visualization_web.compare_solutions', run_id=run.id) }}" class="btn btn-sm btn-primary">
+          Compare All Alternatives &rarr;
+        </a>
+      {% endif %}
+    </div>
 
     {% if run.solutions %}
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.25rem;">
@@ -126,7 +133,7 @@
                 <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.6rem;">
                   <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">RANK GINI</div>
                   <div style="font-size: 1.2rem; font-weight: 700; color: #475569;">
-                    {{ fair.get('rank_gini', 'N/A') }}
+                    {{ "%.3f"|format(fair.get('rank_gini')) if fair.get('rank_gini') is number else fair.get('rank_gini', 'N/A') }}
                   </div>
                 </div>
               </div>
