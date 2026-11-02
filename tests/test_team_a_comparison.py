@@ -189,3 +189,75 @@ def test_explain_tradeoff_recommendation_unit() -> None:
         sol_pref, sol_pref, identical_comp
     )
     assert "Identical" in identical_tradeoff.recommended_choice
+
+
+def test_gini_coefficient_visualization_three_decimals(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verifies that Gini coefficient in the UI is formatted to 3 decimals."""
+    db_file = tmp_path / "test_gini_3dec.db"
+    app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
+    client = app.test_client()
+
+    client.post("/load-scenario/standard", follow_redirects=True)
+    client.post(
+        "/runs/trigger",
+        data={"primary_strategy": "PREFERENCE", "max_alternatives": 3},
+        follow_redirects=True,
+    )
+
+    runs = repositories.RunRepository().list_runs(limit=1)
+    run = runs[0]
+    sol = run.solutions[0]
+    expected_gini = f"{sol.indicators['fairness']['rank_gini']:.3f}"
+
+    # Verify formatted to 3 decimals in /compare
+    compare_res = client.get(f"/compare?run_id={run.id}")
+    assert compare_res.status_code == 200
+    assert expected_gini.encode() in compare_res.data
+
+    # Verify formatted to 3 decimals in /runs/<run_id>
+    run_res = client.get(f"/runs/{run.id}")
+    assert run_res.status_code == 200
+    assert expected_gini.encode() in run_res.data
+
+    # Verify formatted to 3 decimals in /solutions/<solution_id>
+    sol_res = client.get(f"/solutions/{sol.id}")
+    assert sol_res.status_code == 200
+    assert expected_gini.encode() in sol_res.data
+
+
+def test_gini_coefficient_visualization_three_decimals(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verifies that Gini coefficient in the UI is formatted to 3 decimals."""
+    db_file = tmp_path / "test_gini_3dec.db"
+    app = create_app({"TESTING": True, "DATABASE_PATH": db_file})
+    client = app.test_client()
+
+    client.post("/load-scenario/standard", follow_redirects=True)
+    client.post(
+        "/runs/trigger",
+        data={"primary_strategy": "PREFERENCE", "max_alternatives": 3},
+        follow_redirects=True,
+    )
+
+    runs = repositories.RunRepository().list_runs(limit=1)
+    run = runs[0]
+    sol = run.solutions[0]
+    expected_gini = f"{sol.indicators['fairness']['rank_gini']:.3f}"
+
+    # Verify formatted to 3 decimals in /compare
+    compare_res = client.get(f"/compare?run_id={run.id}")
+    assert compare_res.status_code == 200
+    assert expected_gini.encode() in compare_res.data
+
+    # Verify formatted to 3 decimals in /runs/<run_id>
+    run_res = client.get(f"/runs/{run.id}")
+    assert run_res.status_code == 200
+    assert expected_gini.encode() in run_res.data
+
+    # Verify formatted to 3 decimals in /solutions/<solution_id>
+    sol_res = client.get(f"/solutions/{sol.id}")
+    assert sol_res.status_code == 200
+    assert expected_gini.encode() in sol_res.data

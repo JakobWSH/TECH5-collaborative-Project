@@ -133,7 +133,7 @@
                 <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.6rem;">
                   <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">RANK GINI</div>
                   <div style="font-size: 1.2rem; font-weight: 700; color: #475569;">
-                    {{ fair.get('rank_gini', 'N/A') }}
+                    {{ "%.3f"|format(fair.get('rank_gini')) if fair.get('rank_gini') is number else fair.get('rank_gini', 'N/A') }}
                   </div>
                 </div>
               </div>

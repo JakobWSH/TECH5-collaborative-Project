@@ -158,6 +158,12 @@ def generate_recommendations(
     bal_indicators = best_balanced_sol.indicators
     bal_fairness = bal_indicators.get("fairness", {})
     bal_efficiency = bal_indicators.get("efficiency", {})
+    bal_gini = bal_fairness.get("rank_gini")
+    bal_gini_str = (
+        f"{bal_gini:.3f}"
+        if isinstance(bal_gini, (int, float))
+        else str(bal_gini if bal_gini is not None else "N/A")
+    )
 
     recommendations.append(
         RecommendationItem(
@@ -170,8 +176,7 @@ def generate_recommendations(
                 "Harmonized score between preference rank and skill fit",
             ],
             evidence=[
-                f"Lowest rank disparity (Gini coefficient: "
-                f"{bal_fairness.get('rank_gini', 'N/A')}).",
+                f"Lowest rank disparity (Gini coefficient: {bal_gini_str}).",
                 f"Rank variance: {bal_fairness.get('rank_variance', 'N/A')}.",
                 f"Average skill fit: "
                 f"{bal_efficiency.get('mean_skill_fit', 0.0):.2f}.",

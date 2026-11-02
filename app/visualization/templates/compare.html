@@ -143,7 +143,7 @@
                 {% for s in run_solutions %}
                   {% set fair = s.indicators.get('fairness', {}) %}
                   <td style="text-align: center; color: #475569;">
-                    {{ fair.get('rank_gini', 'N/A') }}
+                    {{ "%.3f"|format(fair.get('rank_gini')) if fair.get('rank_gini') is number else fair.get('rank_gini', 'N/A') }}
                   </td>
                 {% endfor %}
               </tr>

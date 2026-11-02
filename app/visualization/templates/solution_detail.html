@@ -37,7 +37,7 @@
   <div class="kpi-card">
     <span class="kpi-label">Rank Disparity (Gini)</span>
     <span class="kpi-value" style="color: #475569;">
-      {{ fair.get('rank_gini', 'N/A') }}
+      {{ "%.3f"|format(fair.get('rank_gini')) if fair.get('rank_gini') is number else fair.get('rank_gini', 'N/A') }}
     </span>
     <span class="kpi-sub">Variance: {{ fair.get('rank_variance', 'N/A') }}</span>
   </div>
